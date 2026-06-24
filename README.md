@@ -1,0 +1,1 @@
+This is basically my personal implementation of the Raft algorithm starting from scratch. 
