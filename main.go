@@ -120,7 +120,7 @@ func handleConnection(con net.Conn) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("failed to read from a connection")
+			log.Printf("failed to read from a connection: %v", err)
 			return
 		}
 		var result string
