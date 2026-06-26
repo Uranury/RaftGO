@@ -38,6 +38,7 @@ func main() {
 			ticker := time.NewTicker(time.Millisecond * 200)
 			for range ticker.C {
 				con, err := net.Dial("tcp", *peer)
+				reader := bufio.NewReader(con)
 				if err != nil {
 					log.Printf("failed to reach follower: %v", err)
 					continue
@@ -45,8 +46,17 @@ func main() {
 				_, err = con.Write([]byte("HEARTBEAT\n"))
 				if err != nil {
 					log.Printf("failed to send heartbeat: %v", err)
+					con.Close()
+					continue
 				}
-				con.Close()
+				_, err = reader.ReadString('\n')
+				if err != nil {
+					log.Printf("failed to read from the connection: %v", err)
+				}
+
+				if err = con.Close(); err != nil {
+					log.Printf("failed to close a connection: %v", err)
+				}
 			}
 		}()
 	}
