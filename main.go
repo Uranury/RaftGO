@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -16,13 +18,38 @@ const (
 )
 
 var (
-	sharedVar int = 0
-	role          = follower
-	mu        sync.Mutex
+	sharedVar     int = 0
+	role              = follower
+	mu            sync.Mutex
+	lastHeartbeat time.Time
 )
 
 func main() {
-	listener, err := net.Listen("tcp", ":9000")
+	port := flag.String("port", ":9000", "port to listen on")
+	peer := flag.String("peer", "", "address of the peer node")
+	roleFlag := flag.String("role", "follower", "the role of the node")
+
+	flag.Parse()
+
+	if *roleFlag == "leader" {
+		go func() {
+			ticker := time.NewTicker(time.Millisecond * 200)
+			for range ticker.C {
+				con, err := net.Dial("tcp", *peer)
+				if err != nil {
+					log.Printf("failed to reach follower: %v", err)
+					continue
+				}
+				_, err = con.Write([]byte("HEARTBEAT\n"))
+				if err != nil {
+					log.Printf("failed to send heartbeat: %v", err)
+				}
+				con.Close()
+			}
+		}()
+	}
+
+	listener, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to start listening: %v", err)
 	}
@@ -33,7 +60,12 @@ func main() {
 		}
 		go handleConnection(con)
 	}
+}
 
+func UpdateLastHeartbeat(t time.Time) {
+	defer mu.Unlock()
+	mu.Lock()
+	lastHeartbeat = t
 }
 
 func GetValue() int {
@@ -104,6 +136,10 @@ func handleConnection(con net.Conn) {
 			result = fmt.Sprintf("%d", Status())
 		case "HEALTH":
 			result = fmt.Sprintf("%d", Health())
+		case "HEARTBEAT":
+			now := time.Now()
+			UpdateLastHeartbeat(now)
+			result = fmt.Sprintf("New heartbeat received at: %v", now)
 		case "EXIT":
 			con.Write([]byte("Connection closed\n"))
 			return
