@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -120,6 +122,9 @@ func handleConnection(con net.Conn) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
 			log.Printf("failed to read from a connection: %v", err)
 			return
 		}
