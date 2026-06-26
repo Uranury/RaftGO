@@ -34,15 +34,18 @@ func main() {
 	flag.Parse()
 
 	if *roleFlag == "leader" {
+		role = leader
 		go func() {
 			ticker := time.NewTicker(time.Millisecond * 200)
 			for range ticker.C {
 				con, err := net.Dial("tcp", *peer)
-				reader := bufio.NewReader(con)
 				if err != nil {
 					log.Printf("failed to reach follower: %v", err)
 					continue
 				}
+
+				reader := bufio.NewReader(con)
+
 				_, err = con.Write([]byte("HEARTBEAT\n"))
 				if err != nil {
 					log.Printf("failed to send heartbeat: %v", err)
