@@ -2,12 +2,27 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
+
+// helper
+func loadConfig(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+	nodes := make(map[string]string)
+	if err = json.Unmarshal(data, &nodes); err != nil {
+		return nil, fmt.Errorf("failed to parse %q: %v", path, err)
+	}
+	return nodes, nil
+}
 
 func ViewUpdateTime() time.Time {
 	return lastHeartbeat

@@ -28,40 +28,55 @@ var (
 
 func main() {
 	port := flag.String("port", ":9000", "port to listen on")
-	peer := flag.String("peer", "", "address of the peer node")
 	roleFlag := flag.String("role", "follower", "the role of the node")
+	config := flag.String("config", "config.json", "path to config file")
+	id := flag.String("id", "", "id of the node")
 
 	flag.Parse()
 
+	nodes, err := loadConfig(*config)
+	if err != nil {
+		log.Fatalf("error loading config: %v", err)
+	}
+
+	_, ok := nodes[*id]
+	if !ok {
+		log.Fatalf("node %s not found", *id)
+	}
+
+	peers := []string{}
+
+	for selfId, addr := range nodes {
+		if selfId == *id {
+			continue
+		}
+		peers = append(peers, addr)
+	}
+
 	if *roleFlag == "leader" {
 		role = leader
-		go func() {
-			ticker := time.NewTicker(time.Millisecond * 200)
-			for range ticker.C {
-				con, err := net.Dial("tcp", *peer)
-				if err != nil {
-					log.Printf("failed to reach follower: %v", err)
-					continue
-				}
-
-				reader := bufio.NewReader(con)
-
-				_, err = con.Write([]byte("HEARTBEAT\n"))
-				if err != nil {
-					log.Printf("failed to send heartbeat: %v", err)
+		for _, addr := range peers {
+			go func(addr string) {
+				ticker := time.NewTicker(time.Millisecond * 200)
+				for range ticker.C {
+					con, err := net.Dial("tcp", addr)
+					if err != nil {
+						log.Printf("error connecting to %s: %v", addr, err)
+						continue
+					}
+					reader := bufio.NewReader(con)
+					_, err = con.Write([]byte("HEARTBEAT\n"))
+					if err != nil {
+						log.Printf("error writing to %s: %v", addr, err)
+					}
+					_, err = reader.ReadString('\n')
+					if err != nil {
+						log.Printf("error reading from %s: %v", addr, err)
+					}
 					con.Close()
-					continue
 				}
-				_, err = reader.ReadString('\n')
-				if err != nil {
-					log.Printf("failed to read from the connection: %v", err)
-				}
-
-				if err = con.Close(); err != nil {
-					log.Printf("failed to close a connection: %v", err)
-				}
-			}
-		}()
+			}(addr)
+		}
 	}
 
 	listener, err := net.Listen("tcp", *port)
