@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -24,40 +21,41 @@ func loadConfig(path string) (map[string]string, error) {
 	return nodes, nil
 }
 
-func ViewUpdateTime() time.Time {
-	return lastHeartbeat
+func ViewUpdateTime(node *Node) time.Time {
+	return node.lastHeartbeat
 }
 
-func UpdateLastHeartbeat(t time.Time) {
-	defer mu.Unlock()
-	mu.Lock()
-	lastHeartbeat = t
+func UpdateLastHeartbeat(node *Node, t time.Time) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	node.lastHeartbeat = t
 }
 
-func GetValue() int {
-	defer mu.Unlock()
-	mu.Lock()
-	return sharedVar
+func GetValue(node *Node) int {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	return node.sharedVar
 }
 
-func Increment() {
-	defer mu.Unlock()
-	mu.Lock()
-	prev := sharedVar
-	sharedVar++
-	log.Printf("The previous value was %d, updated value is: %d", prev, sharedVar)
+func Increment(node *Node) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	prev := node.sharedVar
+	node.sharedVar++
+	log.Printf("The previous value was %d, updated value is: %d", prev, node.sharedVar)
 }
 
-func Status() int {
-	defer mu.Unlock()
-	mu.Lock()
-	return role
+func Status(node *Node) int {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	return node.role
 }
 
-func Health() int {
+func Health(_ *Node) int {
 	return 1
 }
 
+/*
 func healthCheck(host, port string) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
@@ -77,3 +75,4 @@ func healthCheck(host, port string) error {
 	}
 	return nil
 }
+*/

@@ -19,12 +19,14 @@ const (
 	candidate
 )
 
-var (
-	sharedVar     int = 0
-	role              = follower
+type Node struct {
+	id            string
 	mu            sync.Mutex
+	role          int
 	lastHeartbeat time.Time
-)
+	sharedVar     int
+	peers         []string
+}
 
 func main() {
 	port := flag.String("port", ":9000", "port to listen on")
@@ -44,18 +46,25 @@ func main() {
 		log.Fatalf("node %s not found", *id)
 	}
 
-	peers := []string{}
+	curNode := &Node{
+		id:            *id,
+		mu:            sync.Mutex{},
+		role:          follower,
+		lastHeartbeat: time.Now(),
+		sharedVar:     0,
+		peers:         make([]string, 0),
+	}
 
 	for selfId, addr := range nodes {
-		if selfId == *id {
+		if selfId == curNode.id {
 			continue
 		}
-		peers = append(peers, addr)
+		curNode.peers = append(curNode.peers, addr)
 	}
 
 	if *roleFlag == "leader" {
-		role = leader
-		for _, addr := range peers {
+		curNode.role = leader
+		for _, addr := range curNode.peers {
 			go func(addr string) {
 				ticker := time.NewTicker(time.Millisecond * 200)
 				for range ticker.C {
@@ -88,11 +97,11 @@ func main() {
 		if err != nil {
 			continue
 		}
-		go handleConnection(con)
+		go handleConnection(con, curNode)
 	}
 }
 
-func handleConnection(con net.Conn) {
+func handleConnection(con net.Conn, node *Node) {
 	defer con.Close()
 
 	reader := bufio.NewReader(con)
@@ -111,20 +120,20 @@ func handleConnection(con net.Conn) {
 
 		switch command {
 		case "INCREMENT":
-			Increment()
+			Increment(node)
 			result = "OK"
 		case "VALUE":
-			result = fmt.Sprintf("%d", GetValue())
+			result = fmt.Sprintf("%d", GetValue(node))
 		case "STATUS":
-			result = fmt.Sprintf("%d", Status())
+			result = fmt.Sprintf("%d", Status(node))
 		case "HEALTH":
-			result = fmt.Sprintf("%d", Health())
+			result = fmt.Sprintf("%d", Health(node))
 		case "HEARTBEAT":
 			now := time.Now()
-			UpdateLastHeartbeat(now)
+			UpdateLastHeartbeat(node, now)
 			result = fmt.Sprintf("New heartbeat received at: %v", now)
 		case "UPDATETIME":
-			result = fmt.Sprintf("%v", ViewUpdateTime())
+			result = fmt.Sprintf("%v", ViewUpdateTime(node))
 		case "EXIT":
 			con.Write([]byte("Connection closed\n"))
 			return
