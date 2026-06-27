@@ -21,37 +21,37 @@ func loadConfig(path string) (map[string]string, error) {
 	return nodes, nil
 }
 
-func ViewUpdateTime(node *Node) time.Time {
-	return node.lastHeartbeat
+func (n *Node) ViewUpdateTime() time.Time {
+	return n.lastHeartbeat
 }
 
-func UpdateLastHeartbeat(node *Node, t time.Time) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-	node.lastHeartbeat = t
+func (n *Node) UpdateLastHeartbeat(t time.Time) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lastHeartbeat = t
 }
 
-func GetValue(node *Node) int {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-	return node.sharedVar
+func (n *Node) GetValue() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.sharedVar
 }
 
-func Increment(node *Node) {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-	prev := node.sharedVar
-	node.sharedVar++
-	log.Printf("The previous value was %d, updated value is: %d", prev, node.sharedVar)
+func (n *Node) Increment() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	prev := n.sharedVar
+	n.sharedVar++
+	log.Printf("The previous value was %d, updated value is: %d", prev, n.sharedVar)
 }
 
-func Status(node *Node) int {
-	node.mu.Lock()
-	defer node.mu.Unlock()
-	return node.role
+func (n *Node) Status() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.role
 }
 
-func Health(_ *Node) int {
+func (n *Node) Health() int {
 	return 1
 }
 

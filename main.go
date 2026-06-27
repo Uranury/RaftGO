@@ -120,20 +120,20 @@ func handleConnection(con net.Conn, node *Node) {
 
 		switch command {
 		case "INCREMENT":
-			Increment(node)
+			node.Increment()
 			result = "OK"
 		case "VALUE":
-			result = fmt.Sprintf("%d", GetValue(node))
+			result = fmt.Sprintf("%d", node.GetValue())
 		case "STATUS":
-			result = fmt.Sprintf("%d", Status(node))
+			result = fmt.Sprintf("%d", node.Status())
 		case "HEALTH":
-			result = fmt.Sprintf("%d", Health(node))
+			result = fmt.Sprintf("%d", node.Health())
 		case "HEARTBEAT":
 			now := time.Now()
-			UpdateLastHeartbeat(node, now)
+			node.UpdateLastHeartbeat(now)
 			result = fmt.Sprintf("New heartbeat received at: %v", now)
 		case "UPDATETIME":
-			result = fmt.Sprintf("%v", ViewUpdateTime(node))
+			result = fmt.Sprintf("%v", node.ViewUpdateTime())
 		case "EXIT":
 			con.Write([]byte("Connection closed\n"))
 			return
