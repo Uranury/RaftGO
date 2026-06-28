@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -53,6 +56,62 @@ func (n *Node) Status() string {
 
 func (n *Node) Health() int {
 	return 1
+}
+
+func (n *Node) startElection() {
+	n.mu.Lock()
+	n.term++
+	n.role = candidate
+	n.votedFor = n.id
+	n.votes = 1
+	currentTerm := n.term
+	n.mu.Unlock()
+
+	for _, addr := range n.peers {
+		go func(addr string) {
+			granted, err := n.requestVote(addr, currentTerm)
+			if err != nil {
+				log.Printf("Failed to vote to %s : %v", addr, err)
+				return
+			}
+			if !granted {
+				return
+			}
+			n.mu.Lock()
+			defer n.mu.Unlock()
+			if n.role != candidate || n.term != currentTerm {
+				return
+			}
+			n.votes++
+			if n.votes*2 > len(n.peers)+1 {
+				n.role = leader
+				log.Printf("won election for term %d", currentTerm)
+			}
+		}(addr)
+	}
+}
+
+func (n *Node) requestVote(addr string, term int) (bool, error) {
+	con, err := net.Dial("tcp", addr)
+	if err != nil {
+		return false, err
+	}
+	defer con.Close()
+
+	msg := fmt.Sprintf("REQUEST_VOTE term=%d candidate=%s\n", term, n.id)
+	_, err = con.Write([]byte(msg))
+	if err != nil {
+		return false, err
+	}
+
+	reader := bufio.NewReader(con)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+
+	res := strings.TrimSpace(line)
+	return res == "GRANTED", nil
 }
 
 /*

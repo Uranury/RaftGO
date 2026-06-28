@@ -24,6 +24,9 @@ type Node struct {
 	mu            sync.Mutex
 	role          string
 	lastHeartbeat time.Time
+	term          int
+	votedFor      string
+	votes         int
 	sharedVar     int
 	peers         []string
 }
@@ -64,13 +67,15 @@ func main() {
 
 	go func() {
 		ticker := time.NewTicker(time.Millisecond * 200)
+		defer ticker.Stop()
 		for range ticker.C {
 			curNode.mu.Lock()
 			elapsed := time.Since(curNode.lastHeartbeat)
+			role := curNode.role
 			curNode.mu.Unlock()
 
-			if curNode.role != leader && elapsed > time.Millisecond*500 {
-				log.Printf("timeout fired after %v of silence, would start election here", elapsed.Milliseconds())
+			if role != leader && elapsed > time.Millisecond*500 {
+				curNode.startElection()
 			}
 		}
 	}()
@@ -131,23 +136,41 @@ func handleConnection(con net.Conn, node *Node) {
 		var result string
 		command := strings.TrimSpace(line)
 
-		switch command {
-		case "INCREMENT":
+		switch {
+		case command == "INCREMENT":
 			node.Increment()
 			result = "OK"
-		case "VALUE":
+		case command == "VALUE":
 			result = fmt.Sprintf("%d", node.GetValue())
-		case "STATUS":
+		case command == "STATUS":
 			result = fmt.Sprintf("%s", node.Status())
-		case "HEALTH":
+		case command == "HEALTH":
 			result = fmt.Sprintf("%d", node.Health())
-		case "HEARTBEAT":
+		case command == "HEARTBEAT":
 			now := time.Now()
 			node.UpdateLastHeartbeat(now)
 			result = fmt.Sprintf("New heartbeat received at: %v", now)
-		case "UPDATETIME":
+		case command == "UPDATETIME":
 			result = fmt.Sprintf("%v", node.ViewUpdateTime())
-		case "EXIT":
+		case strings.HasPrefix(command, "REQUEST_VOTE"):
+			var term int
+			var candidate string
+			fmt.Sscanf(command, "REQUEST_VOTE term=%d candidate=%s", &term, &candidate)
+
+			node.mu.Lock()
+			grant := false
+			if term >= node.term && node.votedFor != "" {
+				node.votedFor = candidate
+				node.term = term
+				grant = true
+			}
+			node.mu.Unlock()
+			if grant {
+				result = "GRANTED"
+			} else {
+				result = "DENIED"
+			}
+		case command == "EXIT":
 			con.Write([]byte("Connection closed\n"))
 			return
 		default:
