@@ -14,15 +14,15 @@ import (
 )
 
 const (
-	leader = iota
-	follower
-	candidate
+	leader    = "leader"
+	follower  = "follower"
+	candidate = "candidate"
 )
 
 type Node struct {
 	id            string
 	mu            sync.Mutex
-	role          int
+	role          string
 	lastHeartbeat time.Time
 	sharedVar     int
 	peers         []string
@@ -49,7 +49,7 @@ func main() {
 	curNode := &Node{
 		id:            *id,
 		mu:            sync.Mutex{},
-		role:          follower,
+		role:          *roleFlag,
 		lastHeartbeat: time.Now(),
 		sharedVar:     0,
 		peers:         make([]string, 0),
@@ -61,6 +61,19 @@ func main() {
 		}
 		curNode.peers = append(curNode.peers, addr)
 	}
+
+	go func(n *Node) {
+		ticker := time.NewTicker(time.Millisecond * 200)
+		for range ticker.C {
+			n.mu.Lock()
+			elapsed := time.Since(curNode.lastHeartbeat)
+			n.mu.Unlock()
+
+			if n.role != leader && elapsed > time.Millisecond*500 {
+				log.Printf("timeout fired after %v of silence, would start election here", elapsed.Milliseconds())
+			}
+		}
+	}(curNode)
 
 	if *roleFlag == "leader" {
 		curNode.role = leader
@@ -125,7 +138,7 @@ func handleConnection(con net.Conn, node *Node) {
 		case "VALUE":
 			result = fmt.Sprintf("%d", node.GetValue())
 		case "STATUS":
-			result = fmt.Sprintf("%d", node.Status())
+			result = fmt.Sprintf("%s", node.Status())
 		case "HEALTH":
 			result = fmt.Sprintf("%d", node.Health())
 		case "HEARTBEAT":

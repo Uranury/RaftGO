@@ -45,7 +45,7 @@ func (n *Node) Increment() {
 	log.Printf("The previous value was %d, updated value is: %d", prev, n.sharedVar)
 }
 
-func (n *Node) Status() int {
+func (n *Node) Status() string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.role
