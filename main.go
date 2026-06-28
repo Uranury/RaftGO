@@ -62,18 +62,18 @@ func main() {
 		curNode.peers = append(curNode.peers, addr)
 	}
 
-	go func(n *Node) {
+	go func() {
 		ticker := time.NewTicker(time.Millisecond * 200)
 		for range ticker.C {
-			n.mu.Lock()
+			curNode.mu.Lock()
 			elapsed := time.Since(curNode.lastHeartbeat)
-			n.mu.Unlock()
+			curNode.mu.Unlock()
 
-			if n.role != leader && elapsed > time.Millisecond*500 {
+			if curNode.role != leader && elapsed > time.Millisecond*500 {
 				log.Printf("timeout fired after %v of silence, would start election here", elapsed.Milliseconds())
 			}
 		}
-	}(curNode)
+	}()
 
 	if *roleFlag == "leader" {
 		curNode.role = leader
