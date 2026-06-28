@@ -92,7 +92,7 @@ func (n *Node) startElection() {
 }
 
 func (n *Node) requestVote(addr string, term int) (bool, error) {
-	con, err := net.Dial("tcp", addr)
+	con, err := net.DialTimeout("tcp", addr, time.Millisecond*200)
 	if err != nil {
 		return false, err
 	}
