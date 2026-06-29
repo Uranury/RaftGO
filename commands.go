@@ -71,7 +71,7 @@ func (n *Node) startElection() {
 		go func(addr string) {
 			granted, err := n.requestVote(addr, currentTerm)
 			if err != nil {
-				log.Printf("Failed to vote to %s : %v", addr, err)
+				log.Printf("Failed to request vote from %s: %v", addr, err)
 				return
 			}
 			if !granted {
@@ -147,6 +147,16 @@ func (n *Node) requestVote(addr string, term int) (bool, error) {
 
 	res := strings.TrimSpace(line)
 	return res == "GRANTED", nil
+}
+
+func (n *Node) stepDown(newTerm int) {
+	n.term = newTerm
+	n.role = follower
+	n.votedFor = ""
+	if n.stopLeader != nil {
+		close(n.stopLeader)
+		n.stopLeader = nil
+	}
 }
 
 /*

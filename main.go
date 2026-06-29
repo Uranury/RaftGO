@@ -135,9 +135,7 @@ func handleConnection(con net.Conn, node *Node) {
 			node.mu.Lock()
 			grant := false
 			if term > node.term {
-				node.term = term
-				node.votedFor = ""
-				node.role = follower
+				node.stepDown(term)
 			}
 			if term == node.term && (node.votedFor == "" || node.votedFor == candidate) {
 				node.votedFor = candidate
