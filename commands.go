@@ -78,14 +78,49 @@ func (n *Node) startElection() {
 				return
 			}
 			n.mu.Lock()
-			defer n.mu.Unlock()
 			if n.role != candidate || n.term != currentTerm {
+				n.mu.Unlock()
 				return
 			}
 			n.votes++
-			if n.votes*2 > len(n.peers)+1 {
+			won := n.votes*2 > len(n.peers)+1
+			if won {
 				n.role = leader
 				log.Printf("won election for term %d", currentTerm)
+			}
+			n.mu.Unlock()
+
+			if won {
+				n.startHeartbeats()
+			}
+		}(addr)
+	}
+}
+
+func (n *Node) startHeartbeats() {
+	n.mu.Lock()
+	stop := make(chan struct{})
+	n.stopLeader = stop
+	peers := append([]string(nil), n.peers...)
+	n.mu.Unlock()
+
+	for _, addr := range peers {
+		go func(addr string) {
+			ticker := time.NewTicker(time.Millisecond * 200)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					conn, err := net.DialTimeout("tcp", addr, time.Millisecond*200)
+					if err != nil {
+						continue
+					}
+					conn.Write([]byte("HEARTBEAT\n"))
+					bufio.NewReader(conn).ReadString('\n')
+					conn.Close()
+				}
 			}
 		}(addr)
 	}

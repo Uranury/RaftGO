@@ -29,6 +29,7 @@ type Node struct {
 	votes         int
 	sharedVar     int
 	peers         []string
+	stopLeader    chan struct{}
 }
 
 func main() {
@@ -80,8 +81,6 @@ func main() {
 		}
 	}()
 
-	go handleLeader(curNode)
-
 	listener, err := net.Listen("tcp", *port)
 	if err != nil {
 		log.Fatalf("failed to start listening: %v", err)
@@ -92,35 +91,6 @@ func main() {
 			continue
 		}
 		go handleConnection(con, curNode)
-	}
-}
-
-func handleLeader(n *Node) {
-	for {
-		if n.role == leader {
-			for _, addr := range n.peers {
-				go func() {
-					ticker := time.NewTicker(time.Millisecond * 200)
-					for range ticker.C {
-						con, err := net.Dial("tcp", addr)
-						if err != nil {
-							log.Printf("error connecting to %s: %v", addr, err)
-							continue
-						}
-						reader := bufio.NewReader(con)
-						_, err = con.Write([]byte("HEARTBEAT\n"))
-						if err != nil {
-							log.Printf("error writing to %s: %v", addr, err)
-						}
-						_, err = reader.ReadString('\n')
-						if err != nil {
-							log.Printf("error reading from %s: %v", addr, err)
-						}
-						con.Close()
-					}
-				}()
-			}
-		}
 	}
 }
 
