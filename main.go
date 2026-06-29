@@ -80,31 +80,7 @@ func main() {
 		}
 	}()
 
-	if *roleFlag == "leader" {
-		curNode.role = leader
-		for _, addr := range curNode.peers {
-			go func(addr string) {
-				ticker := time.NewTicker(time.Millisecond * 200)
-				for range ticker.C {
-					con, err := net.Dial("tcp", addr)
-					if err != nil {
-						log.Printf("error connecting to %s: %v", addr, err)
-						continue
-					}
-					reader := bufio.NewReader(con)
-					_, err = con.Write([]byte("HEARTBEAT\n"))
-					if err != nil {
-						log.Printf("error writing to %s: %v", addr, err)
-					}
-					_, err = reader.ReadString('\n')
-					if err != nil {
-						log.Printf("error reading from %s: %v", addr, err)
-					}
-					con.Close()
-				}
-			}(addr)
-		}
-	}
+	go handleLeader(curNode)
 
 	listener, err := net.Listen("tcp", *port)
 	if err != nil {
@@ -116,6 +92,35 @@ func main() {
 			continue
 		}
 		go handleConnection(con, curNode)
+	}
+}
+
+func handleLeader(n *Node) {
+	for {
+		if n.role == leader {
+			for _, addr := range n.peers {
+				go func() {
+					ticker := time.NewTicker(time.Millisecond * 200)
+					for range ticker.C {
+						con, err := net.Dial("tcp", addr)
+						if err != nil {
+							log.Printf("error connecting to %s: %v", addr, err)
+							continue
+						}
+						reader := bufio.NewReader(con)
+						_, err = con.Write([]byte("HEARTBEAT\n"))
+						if err != nil {
+							log.Printf("error writing to %s: %v", addr, err)
+						}
+						_, err = reader.ReadString('\n')
+						if err != nil {
+							log.Printf("error reading from %s: %v", addr, err)
+						}
+						con.Close()
+					}
+				}()
+			}
+		}
 	}
 }
 
