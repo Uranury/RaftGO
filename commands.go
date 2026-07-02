@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net"
 	"os"
 	"strings"
@@ -28,15 +29,7 @@ func (n *Node) ViewUpdateTime() time.Time {
 	return n.lastHeartbeat
 }
 
-func (n *Node) UpdateLastHeartbeat(t time.Time) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.lastHeartbeat = t
-}
-
 func (n *Node) GetValue() int {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	return n.sharedVar
 }
 
@@ -47,19 +40,20 @@ func (n *Node) Increment() {
 }
 
 func (n *Node) Status() string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	return n.role
 }
 
 func (n *Node) SetLeader(leaderAddr string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	n.leaderAddr = leaderAddr
 }
 
 func (n *Node) Health() int {
 	return 1
+}
+
+func (n *Node) resetElectionTimeout(min, max time.Duration, t time.Time) {
+	n.lastHeartbeat = t
+	n.electionTimeout = min + time.Duration(rand.Int64N(int64(max-min)))
 }
 
 func (n *Node) startElection() {

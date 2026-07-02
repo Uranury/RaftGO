@@ -20,18 +20,19 @@ const (
 )
 
 type Node struct {
-	id            string
-	mu            sync.Mutex
-	role          string
-	lastHeartbeat time.Time
-	term          int
-	votedFor      string
-	votes         int
-	sharedVar     int
-	addr          string
-	leaderAddr    string
-	peers         []string
-	stopLeader    chan struct{}
+	id              string
+	mu              sync.Mutex
+	role            string
+	lastHeartbeat   time.Time
+	electionTimeout time.Duration
+	term            int
+	votedFor        string
+	votes           int
+	sharedVar       int
+	addr            string
+	leaderAddr      string
+	peers           []string
+	stopLeader      chan struct{}
 }
 
 func main() {
@@ -53,13 +54,14 @@ func main() {
 	}
 
 	curNode := &Node{
-		id:            *id,
-		mu:            sync.Mutex{},
-		role:          *roleFlag,
-		addr:          curAddr,
-		lastHeartbeat: time.Now(),
-		sharedVar:     0,
-		peers:         make([]string, 0),
+		id:              *id,
+		mu:              sync.Mutex{},
+		role:            *roleFlag,
+		addr:            curAddr,
+		lastHeartbeat:   time.Now(),
+		electionTimeout: 500 * time.Millisecond,
+		sharedVar:       0,
+		peers:           make([]string, 0),
 	}
 
 	for selfId, addr := range nodes {
@@ -75,10 +77,15 @@ func main() {
 		for range ticker.C {
 			curNode.mu.Lock()
 			elapsed := time.Since(curNode.lastHeartbeat)
+			timeout := curNode.electionTimeout
 			role := curNode.role
 			curNode.mu.Unlock()
 
-			if role != leader && elapsed > time.Millisecond*500 {
+			if role != leader && elapsed > timeout {
+				curNode.mu.Lock()
+				curNode.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
+				curNode.mu.Unlock()
+
 				curNode.startElection()
 			}
 		}
@@ -125,9 +132,13 @@ func handleConnection(con net.Conn, node *Node) {
 			}
 			node.mu.Unlock()
 		case command == "VALUE":
+			node.mu.Lock()
 			result = fmt.Sprintf("%d", node.GetValue())
+			node.mu.Unlock()
 		case command == "STATUS":
+			node.mu.Lock()
 			result = fmt.Sprintf(node.Status())
+			node.mu.Unlock()
 		case command == "HEALTH":
 			result = fmt.Sprintf("%d", node.Health())
 		case strings.HasPrefix(command, "HEARTBEAT"):
@@ -135,22 +146,26 @@ func handleConnection(con net.Conn, node *Node) {
 			var leaderAddr string
 			now := time.Now()
 			fmt.Sscanf(command, "HEARTBEAT term=%d leader=%s", &term, &leaderAddr)
+			node.mu.Lock()
 			if node.term > term {
 				result = fmt.Sprintf("Heartbeat sender has a lower term of: %d, own term: %d", term, node.term)
-			} else if term > node.term {
-				node.mu.Lock()
-				node.stepDown(term)
 				node.mu.Unlock()
-				node.UpdateLastHeartbeat(now)
+			} else if term > node.term {
+				node.stepDown(term)
+				node.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, now)
 				node.SetLeader(leaderAddr)
+				node.mu.Unlock()
 				result = fmt.Sprintf("New leader spotted with addr: %s", leaderAddr)
 			} else {
-				node.UpdateLastHeartbeat(now)
+				node.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, now)
 				node.SetLeader(leaderAddr)
+				node.mu.Unlock()
 				result = fmt.Sprintf("New heartbeat received at: %v", now)
 			}
 		case command == "UPDATETIME":
+			node.mu.Lock()
 			result = fmt.Sprintf("%v", node.ViewUpdateTime())
+			node.mu.Unlock()
 		case strings.HasPrefix(command, "REQUEST_VOTE"):
 			var term int
 			var candidate string
@@ -162,6 +177,7 @@ func handleConnection(con net.Conn, node *Node) {
 				node.stepDown(term)
 			}
 			if term == node.term && (node.votedFor == "" || node.votedFor == candidate) {
+				node.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
 				node.votedFor = candidate
 				node.lastHeartbeat = time.Now()
 				grant = true
