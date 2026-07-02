@@ -15,8 +15,7 @@ If you're reading this, please make sure to follow me on GitHub and LinkedIn. I 
 
 - **Log replication** — the `INCREMENT` command only modifies the local node's in-memory integer. Nothing is replicated.
 - **Persistence** — state is lost on restart.
-- **Leader redirect** — any node accepts any command regardless of role.
-- **Heartbeat validation** — heartbeats aren't verified to come from the current-term leader.
+- **Heartbeat validation** — heartbeats check the sender's term but don't verify the sender's identity beyond that.
 
 ## Layout
 
@@ -50,7 +49,7 @@ nc localhost 9000
 | `VALUE` | Return current value of the shared integer |
 | `STATUS` | Return node's current role (leader/follower/candidate) |
 | `HEALTH` | Returns `1` (always) |
-| `HEARTBEAT` | Reset the heartbeat timer (sent by leader to peers) |
+| `HEARTBEAT term=<n> leader=<addr>` | Reset the election timer; validates sender's term and tracks current leader address |
 | `UPDATETIME` | Return the timestamp of the last heartbeat |
 | `REQUEST_VOTE term=<n> candidate=<id>` | Request a vote for an election |
 | `EXIT` | Close the connection |
