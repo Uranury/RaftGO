@@ -28,6 +28,8 @@ type Node struct {
 	votedFor      string
 	votes         int
 	sharedVar     int
+	addr          string
+	leaderAddr    string
 	peers         []string
 	stopLeader    chan struct{}
 }
@@ -45,7 +47,7 @@ func main() {
 		log.Fatalf("error loading config: %v", err)
 	}
 
-	_, ok := nodes[*id]
+	curAddr, ok := nodes[*id]
 	if !ok {
 		log.Fatalf("node %s not found", *id)
 	}
@@ -54,6 +56,7 @@ func main() {
 		id:            *id,
 		mu:            sync.Mutex{},
 		role:          *roleFlag,
+		addr:          curAddr,
 		lastHeartbeat: time.Now(),
 		sharedVar:     0,
 		peers:         make([]string, 0),
@@ -113,18 +116,39 @@ func handleConnection(con net.Conn, node *Node) {
 
 		switch {
 		case command == "INCREMENT":
-			node.Increment()
-			result = "OK"
+			node.mu.Lock()
+			if node.role != leader {
+				result = fmt.Sprintf("Current leader has addr: %s", node.leaderAddr)
+			} else {
+				node.Increment()
+				result = "OK"
+			}
+			node.mu.Unlock()
 		case command == "VALUE":
 			result = fmt.Sprintf("%d", node.GetValue())
 		case command == "STATUS":
-			result = fmt.Sprintf("%s", node.Status())
+			result = fmt.Sprintf(node.Status())
 		case command == "HEALTH":
 			result = fmt.Sprintf("%d", node.Health())
-		case command == "HEARTBEAT":
+		case strings.HasPrefix(command, "HEARTBEAT"):
+			var term int
+			var leaderAddr string
 			now := time.Now()
-			node.UpdateLastHeartbeat(now)
-			result = fmt.Sprintf("New heartbeat received at: %v", now)
+			fmt.Sscanf(command, "HEARTBEAT term=%d leader=%s", &term, &leaderAddr)
+			if node.term > term {
+				result = fmt.Sprintf("Heartbeat sender has a lower term of: %d, own term: %d", term, node.term)
+			} else if term > node.term {
+				node.mu.Lock()
+				node.stepDown(term)
+				node.mu.Unlock()
+				node.UpdateLastHeartbeat(now)
+				node.SetLeader(leaderAddr)
+				result = fmt.Sprintf("New leader spotted with addr: %s", leaderAddr)
+			} else {
+				node.UpdateLastHeartbeat(now)
+				node.SetLeader(leaderAddr)
+				result = fmt.Sprintf("New heartbeat received at: %v", now)
+			}
 		case command == "UPDATETIME":
 			result = fmt.Sprintf("%v", node.ViewUpdateTime())
 		case strings.HasPrefix(command, "REQUEST_VOTE"):

@@ -41,8 +41,6 @@ func (n *Node) GetValue() int {
 }
 
 func (n *Node) Increment() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	prev := n.sharedVar
 	n.sharedVar++
 	log.Printf("The previous value was %d, updated value is: %d", prev, n.sharedVar)
@@ -52,6 +50,12 @@ func (n *Node) Status() string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.role
+}
+
+func (n *Node) SetLeader(leaderAddr string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.leaderAddr = leaderAddr
 }
 
 func (n *Node) Health() int {
@@ -117,7 +121,8 @@ func (n *Node) startHeartbeats() {
 					if err != nil {
 						continue
 					}
-					conn.Write([]byte("HEARTBEAT\n"))
+					msg := fmt.Sprintf("HEARTBEAT term=%d leader=%s\n", n.term, n.addr)
+					conn.Write([]byte(msg))
 					bufio.NewReader(conn).ReadString('\n')
 					conn.Close()
 				}
