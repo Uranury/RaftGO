@@ -54,15 +54,17 @@ func main() {
 	}
 
 	curNode := &Node{
-		id:              *id,
-		mu:              sync.Mutex{},
-		role:            *roleFlag,
-		addr:            curAddr,
-		lastHeartbeat:   time.Now(),
-		electionTimeout: 500 * time.Millisecond,
-		sharedVar:       0,
-		peers:           make([]string, 0),
+		id:            *id,
+		mu:            sync.Mutex{},
+		role:          *roleFlag,
+		addr:          curAddr,
+		lastHeartbeat: time.Now(),
+		sharedVar:     0,
+		peers:         make([]string, 0),
 	}
+	curNode.mu.Lock()
+	curNode.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
+	curNode.mu.Unlock()
 
 	for selfId, addr := range nodes {
 		if selfId == curNode.id {
