@@ -81,14 +81,14 @@ func main() {
 			elapsed := time.Since(curNode.lastHeartbeat)
 			timeout := curNode.electionTimeout
 			role := curNode.role
-			curNode.mu.Unlock()
 
 			if role != leader && elapsed > timeout {
-				curNode.mu.Lock()
 				curNode.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
 				curNode.mu.Unlock()
 
 				curNode.startElection()
+			} else {
+				curNode.mu.Unlock()
 			}
 		}
 	}()

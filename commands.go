@@ -58,6 +58,10 @@ func (n *Node) resetElectionTimeout(min, max time.Duration, t time.Time) {
 
 func (n *Node) startElection() {
 	n.mu.Lock()
+	if n.role == leader {
+		n.mu.Unlock()
+		return
+	}
 	n.term++
 	n.role = candidate
 	n.votedFor = n.id
@@ -115,7 +119,9 @@ func (n *Node) startHeartbeats() {
 					if err != nil {
 						continue
 					}
+					n.mu.Lock()
 					msg := fmt.Sprintf("HEARTBEAT term=%d leader=%s\n", n.term, n.addr)
+					n.mu.Unlock()
 					conn.Write([]byte(msg))
 					bufio.NewReader(conn).ReadString('\n')
 					conn.Close()
