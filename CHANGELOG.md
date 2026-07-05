@@ -62,6 +62,17 @@ Rough log of what's been done, in order. Not pinned to versions since this is a 
 - Added `resetElectionTimeout(min, max, t)` — called on heartbeat receipt, on granting a vote, and when a new election fires — so every path that should delay an election does so with a fresh random deadline.
 - Removed per-method `sync.Mutex` from simple getters (`GetValue`, `Status`, `SetLeader`). Callers now hold the lock explicitly around command-dispatch blocks, making the locking discipline visible and preventing double-lock panics.
 
+## No more redundant elections
+- `startElection()` now bails out immediately if the node is already `leader`, instead of tearing down its own leadership by re-running for election.
+- Fixed a data race in `startHeartbeats()`: the heartbeat sender goroutine now reads `n.term`/`n.addr` under the lock when building the `HEARTBEAT` message, instead of reading `n.term` unsynchronized.
+- Collapsed the election-timeout ticker's read-then-unlock-then-relock sequence into a single critical section per tick (still followed by a second, separate fix below — this pass removed the pointless double lock/unlock but didn't yet close the real race).
+
+## Concurrency fix: election decision and state mutation in one lock acquisition
+- Root-caused a TOCTOU race in the election ticker: it read `role`/`elapsed`/`timeout` and decided to start an election, then released the lock and re-acquired it separately in `startElection()` to mutate state. In the gap between those two lock acquisitions, a concurrent `REQUEST_VOTE` or `HEARTBEAT` handler could legitimately update `votedFor`/`lastHeartbeat` (e.g. granting a vote to another candidate) — only for the ticker's stale decision to clobber it by bumping the term and re-declaring candidacy anyway.
+- Split `startElection()` into `beginElection()` (pure state mutation — term++, role=candidate, votedFor=self; must be called with `n.mu` already held) and `broadcastVoteRequests(term)` (the network fan-out, called lock-free). The ticker now holds one lock across the read, the decision, and the mutation, and only releases it right before the network broadcast.
+- Verified with a 3-node cluster across repeated leader-kill cycles: no more spurious re-elections clobbering a just-granted vote.
+- **Found separately, not yet fixed**: an operator swapping which `-id` flag goes with which machine causes each swapped node's peer list (built by excluding its own *id*, not its own *address*) to include its own real address. A candidate then dials itself, and its own `REQUEST_VOTE` handler grants it a second, phantom vote (since `votedFor == candidate` trivially holds for a self-referential request) — letting a single misconfigured node reach quorum alone. This produces genuine split brain (two leaders, same term) and is a different bug from the TOCTOU race above: it's deterministic, not timing-dependent. Reproduced in `cluster_test.go` (`TestSwappedIDsCauseSelfVoteSplitBrain`, currently a known failing/red test). Fix would be to reject self-referential `REQUEST_VOTE`s and/or validate id-to-address ownership at startup.
+
 ---
 
 ## What's not implemented yet
@@ -71,3 +82,4 @@ Rough log of what's been done, in order. Not pinned to versions since this is a 
 - **Actual Raft log** — there are no log entries, no commit index, no state machine replay.
 - **Heartbeat term verification** — the `HEARTBEAT` command resets the timer unconditionally; it doesn't check whether it came from the legitimate current-term leader.
 - **`HEALTH`** always returns `1`. The commented-out client-side `healthCheck` function was removed.
+- **Self-vote via id/address mismatch** — a node never checks whether an incoming `REQUEST_VOTE`'s candidate is itself, and peers are excluded by config *id* rather than by *address*. Swapping which `-id` a machine runs as puts that machine's own address in its own peer list, letting it phantom-vote for itself twice and reach quorum without any real peer. See `cluster_test.go`.
