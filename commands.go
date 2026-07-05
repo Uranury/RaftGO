@@ -56,19 +56,20 @@ func (n *Node) resetElectionTimeout(min, max time.Duration, t time.Time) {
 	n.electionTimeout = min + time.Duration(rand.Int64N(int64(max-min)))
 }
 
-func (n *Node) startElection() {
-	n.mu.Lock()
-	if n.role == leader {
-		n.mu.Unlock()
-		return
-	}
+// beginElection transitions n into a candidate for a new term and returns
+// that term. The caller must already hold n.mu: folding the eligibility
+// check and this mutation into the same critical section as the caller's
+// "should I run for election" decision prevents a concurrent vote grant or
+// heartbeat (which would make that decision stale) from being clobbered.
+func (n *Node) beginElection() int {
 	n.term++
 	n.role = candidate
 	n.votedFor = n.id
 	n.votes = 1
-	currentTerm := n.term
-	n.mu.Unlock()
+	return n.term
+}
 
+func (n *Node) broadcastVoteRequests(currentTerm int) {
 	for _, addr := range n.peers {
 		go func(addr string) {
 			granted, err := n.requestVote(addr, currentTerm)

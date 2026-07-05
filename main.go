@@ -84,9 +84,10 @@ func main() {
 
 			if role != leader && elapsed > timeout {
 				curNode.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
+				currentTerm := curNode.beginElection()
 				curNode.mu.Unlock()
 
-				curNode.startElection()
+				curNode.broadcastVoteRequests(currentTerm)
 			} else {
 				curNode.mu.Unlock()
 			}
@@ -139,7 +140,7 @@ func handleConnection(con net.Conn, node *Node) {
 			node.mu.Unlock()
 		case command == "STATUS":
 			node.mu.Lock()
-			result = fmt.Sprintf(node.Status())
+			result = node.Status()
 			node.mu.Unlock()
 		case command == "HEALTH":
 			result = fmt.Sprintf("%d", node.Health())
