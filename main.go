@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,7 +33,7 @@ type Node struct {
 	addr            string
 	leaderAddr      string
 	peers           []string
-	stopLeader      chan struct{}
+	stopLeader      context.CancelFunc
 }
 
 func main() {
@@ -42,6 +43,9 @@ func main() {
 	id := flag.String("id", "", "id of the node")
 
 	flag.Parse()
+
+	root, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	nodes, err := loadConfig(*config)
 	if err != nil {
@@ -61,6 +65,7 @@ func main() {
 		lastHeartbeat: time.Now(),
 		sharedVar:     0,
 		peers:         make([]string, 0),
+		stopLeader:    func() {},
 	}
 	curNode.mu.Lock()
 	curNode.resetElectionTimeout(500*time.Millisecond, 800*time.Millisecond, time.Now())
@@ -71,6 +76,11 @@ func main() {
 			continue
 		}
 		curNode.peers = append(curNode.peers, addr)
+	}
+
+	listener, err := net.Listen("tcp", *port)
+	if err != nil {
+		log.Fatalf("failed to start listening: %v", err)
 	}
 
 	go func() {
@@ -87,17 +97,13 @@ func main() {
 				currentTerm := curNode.beginElection()
 				curNode.mu.Unlock()
 
-				curNode.broadcastVoteRequests(currentTerm)
+				curNode.broadcastVoteRequests(root, currentTerm)
 			} else {
 				curNode.mu.Unlock()
 			}
 		}
 	}()
 
-	listener, err := net.Listen("tcp", *port)
-	if err != nil {
-		log.Fatalf("failed to start listening: %v", err)
-	}
 	for {
 		con, err := listener.Accept()
 		if err != nil {

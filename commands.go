@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -69,7 +70,7 @@ func (n *Node) beginElection() int {
 	return n.term
 }
 
-func (n *Node) broadcastVoteRequests(currentTerm int) {
+func (n *Node) broadcastVoteRequests(ctx context.Context, currentTerm int) {
 	for _, addr := range n.peers {
 		go func(addr string) {
 			granted, err := n.requestVote(addr, currentTerm)
@@ -87,23 +88,23 @@ func (n *Node) broadcastVoteRequests(currentTerm int) {
 			}
 			n.votes++
 			won := n.votes*2 > len(n.peers)+1
+			firstWin := won && n.role != leader
 			if won {
 				n.role = leader
-				log.Printf("won election for term %d", currentTerm)
 			}
 			n.mu.Unlock()
-
-			if won {
-				n.startHeartbeats()
+			if firstWin {
+				log.Printf("won election for term %d", currentTerm)
+				heartbeatCtx, cancel := context.WithCancel(ctx)
+				n.startHeartbeats(heartbeatCtx, cancel)
 			}
 		}(addr)
 	}
 }
 
-func (n *Node) startHeartbeats() {
+func (n *Node) startHeartbeats(stop context.Context, cancel context.CancelFunc) {
 	n.mu.Lock()
-	stop := make(chan struct{})
-	n.stopLeader = stop
+	n.stopLeader = cancel
 	peers := append([]string(nil), n.peers...)
 	n.mu.Unlock()
 
@@ -113,7 +114,7 @@ func (n *Node) startHeartbeats() {
 			defer ticker.Stop()
 			for {
 				select {
-				case <-stop:
+				case <-stop.Done():
 					return
 				case <-ticker.C:
 					conn, err := net.DialTimeout("tcp", addr, time.Millisecond*200)
@@ -159,10 +160,7 @@ func (n *Node) stepDown(newTerm int) {
 	n.term = newTerm
 	n.role = follower
 	n.votedFor = ""
-	if n.stopLeader != nil {
-		close(n.stopLeader)
-		n.stopLeader = nil
-	}
+	n.stopLeader()
 }
 
 /*
