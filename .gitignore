@@ -1,0 +1,37 @@
+# Go modules
+/bin/
+/vendor/
+/*.exe
+/*.exe~
+/*.dll
+/*.so
+/*.dylib
+/*.test
+/*.out
+
+# Go workspace files
+go.sum
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# MacOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+
+# Temporary / cache
+*.tmp
+*.temp
+*.bak
