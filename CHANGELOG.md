@@ -73,6 +73,11 @@ Rough log of what's been done, in order. Not pinned to versions since this is a 
 - Verified with a 3-node cluster across repeated leader-kill cycles: no more spurious re-elections clobbering a just-granted vote.
 - **Found separately, not yet fixed**: an operator swapping which `-id` flag goes with which machine causes each swapped node's peer list (built by excluding its own *id*, not its own *address*) to include its own real address. A candidate then dials itself, and its own `REQUEST_VOTE` handler grants it a second, phantom vote (since `votedFor == candidate` trivially holds for a self-referential request) — letting a single misconfigured node reach quorum alone. This produces genuine split brain (two leaders, same term) and is a different bug from the TOCTOU race above: it's deterministic, not timing-dependent. Reproduced in `cluster_test.go` (`TestSwappedIDsCauseSelfVoteSplitBrain`, currently a known failing/red test). Fix would be to reject self-referential `REQUEST_VOTE`s and/or validate id-to-address ownership at startup.
 
+## Context-based shutdown for heartbeats
+- Replaced the `stopLeader chan struct{}` field with `stopLeader context.CancelFunc`, backed by a `context.Context` created in `main()` and threaded through `broadcastVoteRequests` → `startHeartbeats`. `stepDown()` now just calls `n.stopLeader()` instead of nil-checking and closing a channel.
+- Fixed a duplicate-heartbeat bug: previously every goroutine in `broadcastVoteRequests` that observed `won == true` (i.e. every vote counted in after the node already had quorum) called `startHeartbeats()` again, spawning a fresh set of per-peer heartbeat senders on top of the existing ones. Added a `firstWin := won && n.role != leader` check computed under the lock so heartbeats are started exactly once per election win.
+- Reordered `main()` so the TCP listener is created before the election-timeout ticker goroutine is started, instead of after.
+
 ---
 
 ## What's not implemented yet
