@@ -163,24 +163,24 @@ func (n *Node) stepDown(newTerm int) {
 	n.stopLeader()
 }
 
-/*
-func healthCheck(host, port string) error {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
-	if err != nil {
-		return err
+func (n *Node) replicateIncrement() {
+	for _, addr := range n.peers {
+		go func() {
+			con, err := net.DialTimeout("tcp", addr, time.Millisecond*200)
+			if err != nil {
+				return
+			}
+			defer con.Close()
+			msg := "INCREMENT"
+			_, err = con.Write([]byte(msg))
+			if err != nil {
+				return
+			}
+			reader := bufio.NewReader(con)
+			_, err = reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+		}()
 	}
-	defer conn.Close()
-	conn.Write([]byte("HEALTH\n"))
-
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	result := strings.TrimSpace(line)
-	if result != "1" {
-		return fmt.Errorf("health check failed or timed out")
-	}
-	return nil
 }
-*/

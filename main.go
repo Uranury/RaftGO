@@ -137,6 +137,7 @@ func handleConnection(con net.Conn, node *Node) {
 				result = fmt.Sprintf("Current leader has addr: %s", node.leaderAddr)
 			} else {
 				node.Increment()
+				node.replicateIncrement()
 				result = "OK"
 			}
 			node.mu.Unlock()
