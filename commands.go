@@ -171,8 +171,7 @@ func (n *Node) replicateIncrement() {
 				return
 			}
 			defer con.Close()
-			msg := "INCREMENT"
-			_, err = con.Write([]byte(msg))
+			_, err = con.Write([]byte("REPLICATE_INCREMENT\n"))
 			if err != nil {
 				return
 			}
