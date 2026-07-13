@@ -141,7 +141,9 @@ func handleConnection(con net.Conn, node *Node) {
 			}
 			node.mu.Unlock()
 		case command == "REPLICATE_INCREMENT":
+			node.mu.Lock()
 			node.Increment()
+			node.mu.Unlock()
 			result = "OK"
 		case command == "VALUE":
 			node.mu.Lock()
