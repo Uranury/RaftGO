@@ -135,12 +135,13 @@ func handleConnection(con net.Conn, node *Node) {
 			node.mu.Lock()
 			if node.role != leader {
 				result = fmt.Sprintf("Current leader has addr: %s", node.leaderAddr)
+				node.mu.Unlock()
 			} else {
 				node.Increment()
+				node.mu.Unlock()
 				node.replicateIncrement()
 				result = "OK"
 			}
-			node.mu.Unlock()
 		case command == "REPLICATE_INCREMENT":
 			node.mu.Lock()
 			node.Increment()

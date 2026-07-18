@@ -164,8 +164,11 @@ func (n *Node) stepDown(newTerm int) {
 }
 
 func (n *Node) replicateIncrement() {
-	for _, addr := range n.peers {
-		go func() {
+	n.mu.Lock()
+	peers := append([]string(nil), n.peers...)
+	n.mu.Unlock()
+	for _, addr := range peers {
+		go func(addr string) {
 			con, err := net.DialTimeout("tcp", addr, time.Millisecond*200)
 			if err != nil {
 				return
@@ -180,6 +183,6 @@ func (n *Node) replicateIncrement() {
 			if err != nil {
 				return
 			}
-		}()
+		}(addr)
 	}
 }
